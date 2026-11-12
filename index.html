@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>PEPE Live</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0b0f14;
+    color: #e8eefc;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+  .wrap {
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+  }
+  .block {
+    font-size: clamp(26px, 7.2vw, 34px);
+    font-weight: 750;
+    line-height: 1.35;
+    letter-spacing: 0.2px;
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+  }
+  .block.up { color: #22c55e; }
+  .block.down { color: #ef4444; }
+  .meta {
+    margin-top: 14px;
+    font-size: 13px;
+    color: #8b97ad;
+    letter-spacing: 0.1px;
+  }
+  .chart-card {
+    margin-top: 22px;
+    background: #121821;
+    border: 1px solid #243044;
+    border-radius: 16px;
+    padding: 12px 10px 8px;
+  }
+  .chart-label {
+    font-size: 11px;
+    color: #7d8aa0;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4px;
+  }
+  canvas { width: 100%; height: 180px; display: block; }
+  .err { margin-top: 10px; font-size: 12px; color: #f59e0b; min-height: 1em; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="block" class="block">Loading…</div>
+    <div id="meta" class="meta">Buy 502 → Sell 540 · last updated --:--:--</div>
+    <div class="chart-card">
+      <div class="chart-label"><span>Last 3 days · 1h</span><span>502 / 540</span></div>
+      <canvas id="chart" width="720" height="360"></canvas>
+    </div>
+    <div id="err" class="err"></div>
+  </div>
+<script>
+(function () {
+  const COINS = 178821000;
+  const BUY = 0.00000502;
+  const BUY_S = 502;
+  const SELL_S = 540;
+  const FX_FALLBACK = 276.93;
+  const HOSTS = [
+    "https://data-api.binance.vision",
+    "https://api1.binance.com",
+    "https://api.binance.com"
+  ];
+
+  const blockEl = document.getElementById("block");
+  const metaEl = document.getElementById("meta");
+  const errEl = document.getElementById("err");
+  const canvas = document.getElementById("chart");
+
+  async function fetchJson(url) {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error(String(r.status));
+    return r.json();
+  }
+
+  async function fetchPrice() {
+    let last = null;
+    for (const h of HOSTS) {
+      try {
+        const j = await fetchJson(h + "/api/v3/ticker/price?symbol=PEPEUSDT");
+        const p = parseFloat(j.price);
+        if (Number.isFinite(p) && p > 0) return p;
+      } catch (e) { last = e; }
+    }
+    throw last || new Error("price failed");
+  }
+
+  async function fetchFx() {
+    try {
+      const j = await fetchJson("https://open.er-api.com/v6/latest/USD");
+      const fx = j && j.rates && Number(j.rates.PKR);
+      if (Number.isFinite(fx) && fx > 0) return fx;
+    } catch (e) {}
+    return FX_FALLBACK;
+  }
+
+  async function fetchKlines() {
+    let last = null;
+    for (const h of HOSTS) {
+      try {
+        const j = await fetchJson(h + "/api/v3/klines?symbol=PEPEUSDT&interval=1h&limit=72");
+        if (Array.isArray(j) && j.length) {
+          return j.map(function (k) {
+            return { t: k[0], short: Math.round(parseFloat(k[4]) * 1e8) };
+          }).filter(function (x) { return Number.isFinite(x.short); });
+        }
+      } catch (e) { last = e; }
+    }
+    throw last || new Error("klines failed");
+  }
+
+  function nowTime() {
+    return new Date().toLocaleTimeString("en-GB", {
+      timeZone: "Asia/Karachi",
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+  }
+
+  function render(price, fx) {
+    const s = Math.round(price * 1e8);
+    const cost = COINS * BUY * fx;
+    const bag = COINS * price * fx;
+    const pro = Math.round((bag - cost) / 1000);
+    const t = ((s - BUY_S) / (SELL_S - BUY_S)) * 100;
+    const bagK = Math.floor(bag / 1000);
+    const emoji = pro < 0 ? "🔴" : "🟢";
+    const tStr = (t >= 0 ? "+" : "") + t.toFixed(1);
+    blockEl.className = "block " + (t >= 0 ? "up" : "down");
+    blockEl.innerHTML =
+      emoji + " Pro:" + pro + "k/🎯:" + tStr + "%<br>" +
+      "🟢 PEPE " + s + "<br>" +
+      "💰 Bag : PKR " + bagK + "K";
+    metaEl.textContent = "Buy 502 → Sell 540 · last updated " + nowTime();
+  }
+
+  function drawChart(points) {
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || 360;
+    const cssH = canvas.clientHeight || 180;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    if (!points || points.length < 2) {
+      ctx.fillStyle = "#7d8aa0";
+      ctx.font = "12px system-ui,sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Chart loading…", cssW / 2, cssH / 2);
+      return;
+    }
+
+    const shorts = points.map(function (p) { return p.short; });
+    let lo = Math.min.apply(null, shorts.concat([BUY_S, SELL_S]));
+    let hi = Math.max.apply(null, shorts.concat([BUY_S, SELL_S]));
+    const pad = Math.max(8, Math.round((hi - lo) * 0.12));
+    lo -= pad;
+    hi += pad;
+    const left = 36, right = 10, top = 10, bottom = 22;
+    const w = cssW - left - right;
+    const h = cssH - top - bottom;
+
+    function xAt(i) { return left + (i / (points.length - 1)) * w; }
+    function yAt(v) { return top + (1 - (v - lo) / (hi - lo)) * h; }
+
+    ctx.strokeStyle = "#243044";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(left, top + h);
+    ctx.lineTo(left + w, top + h);
+    ctx.stroke();
+
+    function dashLine(val, color, label) {
+      const y = yAt(val);
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(left, y);
+      ctx.lineTo(left + w, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.font = "10px system-ui,sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(label, left + 4, y - 4);
+      ctx.restore();
+    }
+    dashLine(BUY_S, "#f59e0b", "502");
+    dashLine(SELL_S, "#22c55e", "540");
+
+    ctx.strokeStyle = "#60a5fa";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach(function (p, i) {
+      const x = xAt(i), y = yAt(p.short);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    const last = points[points.length - 1];
+    ctx.fillStyle = "#60a5fa";
+    ctx.beginPath();
+    ctx.arc(xAt(points.length - 1), yAt(last.short), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#7d8aa0";
+    ctx.font = "10px system-ui,sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(String(Math.round(hi)), left - 4, top + 8);
+    ctx.fillText(String(Math.round(lo)), left - 4, top + h);
+    ctx.textAlign = "left";
+    ctx.fillText("3d ago", left, cssH - 6);
+    ctx.textAlign = "right";
+    ctx.fillText("now", left + w, cssH - 6);
+  }
+
+  let fxCached = FX_FALLBACK;
+  let klinesLoaded = false;
+
+  async function tick() {
+    try {
+      const price = await fetchPrice();
+      fxCached = await fetchFx();
+      render(price, fxCached);
+      errEl.textContent = "";
+    } catch (e) {
+      errEl.textContent = "Price update failed, retrying…";
+    }
+    if (!klinesLoaded) {
+      try {
+        const pts = await fetchKlines();
+        drawChart(pts);
+        klinesLoaded = true;
+      } catch (e) {
+        drawChart(null);
+      }
+    }
+  }
+
+  drawChart(null);
+  tick();
+  setInterval(tick, 30000);
+  setInterval(function () {
+    if (klinesLoaded) {
+      klinesLoaded = false;
+    }
+  }, 15 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
