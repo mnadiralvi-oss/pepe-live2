@@ -60,6 +60,23 @@
     padding: 0 4px;
   }
   canvas { width: 100%; height: 180px; display: block; }
+  .refresh {
+    margin-top: 16px;
+    appearance: none;
+    border: 1px solid #3a4a66;
+    background: #1a2332;
+    color: #e8eefc;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 650;
+    padding: 10px 18px;
+    border-radius: 12px;
+    cursor: pointer;
+    width: 100%;
+    max-width: 240px;
+  }
+  .refresh:active { background: #243044; }
+  .refresh:disabled { opacity: 0.6; cursor: default; }
   .err { margin-top: 10px; font-size: 12px; color: #f59e0b; min-height: 1em; }
 </style>
 </head>
@@ -67,6 +84,7 @@
   <div class="wrap">
     <div id="block" class="block">Loading…</div>
     <div id="meta" class="meta">Buy 502 → Sell 540 · last updated --:--:--</div>
+    <button id="refresh" type="button" class="refresh">🔄 Refresh</button>
     <div class="chart-card">
       <div class="chart-label"><span>Last 3 days · 1h</span><span>502 / 540</span></div>
       <canvas id="chart" width="720" height="360"></canvas>
@@ -86,10 +104,15 @@
     "https://api.binance.com"
   ];
 
+  const PRICE_MS = 5000;
+  const FX_MS = 10 * 60 * 1000;
+  const CHART_MS = 5 * 60 * 1000;
+
   const blockEl = document.getElementById("block");
   const metaEl = document.getElementById("meta");
   const errEl = document.getElementById("err");
   const canvas = document.getElementById("chart");
+  const refreshBtn = document.getElementById("refresh");
 
   async function fetchJson(url) {
     const r = await fetch(url, { cache: "no-store" });
@@ -246,36 +269,66 @@
   }
 
   let fxCached = FX_FALLBACK;
-  let klinesLoaded = false;
+  let fxAt = 0;
 
-  async function tick() {
+  async function getFx(force) {
+    if (!force && fxAt && (Date.now() - fxAt) < FX_MS && fxCached > 0) {
+      return fxCached;
+    }
+    const fx = await fetchFx();
+    fxCached = fx;
+    fxAt = Date.now();
+    return fx;
+  }
+
+  async function updatePrice() {
+    const price = await fetchPrice();
+    const fx = await getFx(false);
+    render(price, fx);
+    errEl.textContent = "";
+  }
+
+  async function updateChart() {
+    const pts = await fetchKlines();
+    drawChart(pts);
+  }
+
+  async function tickPrice() {
     try {
-      const price = await fetchPrice();
-      fxCached = await fetchFx();
-      render(price, fxCached);
-      errEl.textContent = "";
+      await updatePrice();
     } catch (e) {
       errEl.textContent = "Price update failed, retrying…";
     }
-    if (!klinesLoaded) {
-      try {
-        const pts = await fetchKlines();
-        drawChart(pts);
-        klinesLoaded = true;
-      } catch (e) {
-        drawChart(null);
-      }
+  }
+
+  async function tickChart() {
+    try {
+      await updateChart();
+    } catch (e) {
+      if (!canvas.getContext("2d")) return;
     }
   }
 
-  drawChart(null);
-  tick();
-  setInterval(tick, 30000);
-  setInterval(function () {
-    if (klinesLoaded) {
-      klinesLoaded = false;
+  async function refreshNow() {
+    refreshBtn.disabled = true;
+    try {
+      fxAt = 0;
+      await updatePrice();
+      await updateChart();
+    } catch (e) {
+      errEl.textContent = "Refresh failed, retrying…";
+    } finally {
+      refreshBtn.disabled = false;
     }
-  }, 15 * 60 * 1000);
+  }
+
+  refreshBtn.addEventListener("click", refreshNow);
+
+  drawChart(null);
+  tickPrice();
+  tickChart();
+  setInterval(tickPrice, 5000);
+  setInterval(tickChart, CHART_MS);
 })();
 </script>
 </body>
