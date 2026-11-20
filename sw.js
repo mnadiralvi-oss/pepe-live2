@@ -1,4 +1,4 @@
-const CACHE = 'pepe-live2-v20261120';
+const CACHE = 'pepe-live2-v20261120-10s';
 const ASSETS = ['./', './index.html'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
