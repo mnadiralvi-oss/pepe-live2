@@ -78,11 +78,60 @@
   .refresh:active { background: #243044; }
   .refresh:disabled { opacity: 0.6; cursor: default; }
   .err { margin-top: 10px; font-size: 12px; color: #f59e0b; min-height: 1em; }
+  .progress-wrap {
+    margin-top: 16px;
+    width: 100%;
+  }
+  .progress-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 650;
+    color: #8b97ad;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+  .progress-labels .pct {
+    color: #e8eefc;
+    font-weight: 750;
+  }
+  .progress-labels .pct.down { color: #ef4444; }
+  .progress-labels .pct.up { color: #22c55e; }
+  .progress-track {
+    height: 14px;
+    border-radius: 999px;
+    background: #1a2332;
+    border: 1px solid #243044;
+    overflow: hidden;
+  }
+  .progress-track.below {
+    background: #3a1515;
+    border-color: #7f1d1d;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #22c55e;
+    border-radius: 999px;
+    transition: width 0.35s ease;
+  }
 </style>
 </head>
 <body>
   <div class="wrap">
     <div id="block" class="block">Loading…</div>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-labels">
+        <span>360</span>
+        <span id="progressPct" class="pct">🎯 --.-%</span>
+        <span>420</span>
+      </div>
+      <div class="progress-track" id="progressTrack">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
     <div id="meta" class="meta">Buy 360 → Sell 420 · last updated --:--:--</div>
     <button id="refresh" type="button" class="refresh">🔄 Refresh</button>
     <div class="chart-card">
@@ -112,6 +161,9 @@
 
   const blockEl = document.getElementById("block");
   const metaEl = document.getElementById("meta");
+  const progressFill = document.getElementById("progressFill");
+  const progressTrack = document.getElementById("progressTrack");
+  const progressPct = document.getElementById("progressPct");
   const errEl = document.getElementById("err");
   const canvas = document.getElementById("chart");
   const refreshBtn = document.getElementById("refresh");
@@ -235,14 +287,17 @@
     const t = ((s - BUY_S) / (SELL_S - BUY_S)) * 100;
     const tStr = (t >= 0 ? "+" : "") + t.toFixed(1);
     const bagK = Math.floor(bag / 1000);
-    const bag420K = Math.floor(COINS * SELL * fx / 1000);
     const emoji = proPkr < 0 ? "🔴" : "🟢";
+    const barPct = Math.max(0, Math.min(100, t));
     blockEl.className = "block " + (proPkr < 0 ? "down" : "up");
     blockEl.innerHTML =
       emoji + " Pro:" + proK + "K/🎯:" + tStr + "%<br>" +
       "🟢 PEPE " + s + "<br>" +
-      "💰 Bag : PKR " + bagK + "K<br>" +
-      "🎯 Sell target: 420 | Bag at 420: " + bag420K + "K";
+      "💰 Bag : PKR " + bagK + "K";
+    progressFill.style.width = barPct + "%";
+    progressTrack.className = "progress-track" + (t < 0 ? " below" : "");
+    progressPct.textContent = "🎯 " + tStr + "%";
+    progressPct.className = "pct " + (t < 0 ? "down" : "up");
     metaEl.textContent = "Buy 360 → Sell 420 · last updated " + nowTime();
     maybeNotify(s, t, proPkr);
   }
