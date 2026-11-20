@@ -2,4 +2,4 @@
 
 Simple live PEPE hold tracker. Opens at GitHub Pages.
 
-Position: 178,821,000 PEPE bought at 502, sell target 540.
+Position: 205,068,006 PEPE, buy level 360, sell target 420.
